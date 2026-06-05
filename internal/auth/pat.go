@@ -23,7 +23,7 @@ func ValidatePAT(host, token string) (username string, err error) {
 	if err != nil {
 		return "", fmt.Errorf("validate PAT: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	switch resp.StatusCode {
 	case http.StatusOK:

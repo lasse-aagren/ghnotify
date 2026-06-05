@@ -105,7 +105,7 @@ func (u *Updater) check(onFound func(string, string)) {
 		log.Printf("ghnotify: update check: %v", err)
 		return
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
 		return

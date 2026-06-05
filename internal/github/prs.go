@@ -104,9 +104,10 @@ func aggregateReviewState(reviews []*ghapi.PullRequestReview) ReviewState {
 	for _, r := range reviews {
 		login := r.GetUser().GetLogin()
 		state := r.GetState()
-		if state == "DISMISSED" {
+		switch state {
+		case "DISMISSED":
 			delete(latest, login)
-		} else if state == "APPROVED" || state == "CHANGES_REQUESTED" {
+		case "APPROVED", "CHANGES_REQUESTED":
 			latest[login] = state
 		}
 	}

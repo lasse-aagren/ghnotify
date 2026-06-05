@@ -48,8 +48,7 @@ func (l *prList) build() {
 // It filters snoozed PRs, sorts, caps at maxItems, and returns the visible count.
 func (l *prList) update(prs []github.PR) int {
 	// Filter snoozed.
-	visible := prs[:0:0] // reuse backing array header without aliasing
-	visible = make([]github.PR, 0, len(prs))
+	visible := make([]github.PR, 0, len(prs))
 	for _, pr := range prs {
 		if !l.snooze.IsSnoozed(pr.Key(), pr.UpdatedAt) {
 			visible = append(visible, pr)

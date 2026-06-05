@@ -50,17 +50,17 @@ func StartOAuthFlow(host, clientID, clientSecret string) (*OAuthResult, error) {
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
 		if code := r.URL.Query().Get("code"); code != "" {
 			codeCh <- code
-			fmt.Fprint(w, "<html><body>Authenticated! You may close this tab.</body></html>")
+			fmt.Fprint(w, "<html><body>Authenticated! You may close this tab.</body></html>") //nolint:errcheck
 		} else {
 			desc := r.URL.Query().Get("error_description")
 			errCh <- fmt.Errorf("oauth denied: %s", desc)
-			fmt.Fprint(w, "<html><body>Authentication failed. You may close this tab.</body></html>")
+			fmt.Fprint(w, "<html><body>Authentication failed. You may close this tab.</body></html>") //nolint:errcheck
 		}
 	})
 
 	srv := &http.Server{Handler: mux}
 	go srv.Serve(listener) //nolint:errcheck
-	defer srv.Close()
+	defer srv.Close() //nolint:errcheck
 
 	authorizeURL := buildAuthorizeURL(host, clientID, challenge, redirectURI)
 	if err := exec.Command("open", authorizeURL).Start(); err != nil {
@@ -161,7 +161,7 @@ func doTokenRequest(host string, body url.Values) (*OAuthResult, error) {
 	if err != nil {
 		return nil, fmt.Errorf("token request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	data, _ := io.ReadAll(resp.Body)
 	var tr tokenResponse
@@ -199,7 +199,7 @@ func fetchUsername(host, token string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	var u struct {
 		Login string `json:"login"`
