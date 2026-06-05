@@ -65,7 +65,7 @@ jobs:
           TEAM_ID:           ${{ secrets.TEAM_ID }}
         run: |
           set -euo pipefail
-          chmod +x scripts/codesign.sh scripts/notarize.sh
+          chmod +x scripts/codesign.sh scripts/notarize.sh scripts/make-app.sh
 
           for zipfile in dist/*.zip; do
             echo "Processing $zipfile..."
@@ -73,11 +73,12 @@ jobs:
 
             unzip -q "$zipfile" -d "$tmpdir"
 
-            # Sign the binary (no-op if cert absent).
-            ./scripts/codesign.sh "$tmpdir/ghnotify"
+            # Wrap the binary in a .app bundle, then sign the bundle.
+            ./scripts/make-app.sh "$tmpdir/ghnotify" "$tmpdir/ghnotify.app"
+            ./scripts/codesign.sh "$tmpdir/ghnotify.app"
 
-            # Re-zip with (possibly) signed binary.
-            (cd "$tmpdir" && zip -j - ghnotify) > "${zipfile}.new"
+            # Re-zip as .app bundle.
+            (cd "$tmpdir" && zip -r - ghnotify.app) > "${zipfile}.new"
             mv "${zipfile}.new" "$zipfile"
 
             rm -rf "$tmpdir"

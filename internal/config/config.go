@@ -48,7 +48,7 @@ func Default() *AppConfig {
 			NewReviewRequests: true,
 			PRApproved:        true,
 			PRMerged:          true,
-			CIStatusChange:    false,
+			CIStatusChange:    true,
 			NewComments:       false,
 		},
 	}

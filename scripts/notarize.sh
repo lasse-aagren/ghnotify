@@ -18,16 +18,22 @@ xcrun notarytool submit "$ARCHIVE" \
     --team-id   "$TEAM_ID" \
     --wait
 
-# Staple the binary inside the archive so it can be verified offline.
+# Staple the artifact inside the archive so it can be verified offline.
 TMPDIR="$(mktemp -d)"
 trap 'rm -rf "$TMPDIR"' EXIT
 
 unzip -q "$ARCHIVE" -d "$TMPDIR"
+APP_BUNDLE="$TMPDIR/ghnotify.app"
 BINARY="$TMPDIR/ghnotify"
-if [[ -f "$BINARY" ]]; then
+
+if [[ -d "$APP_BUNDLE" ]]; then
+    echo "notarize.sh: stapling '$APP_BUNDLE'..." >&2
+    xcrun stapler staple "$APP_BUNDLE"
+    (cd "$TMPDIR" && zip -r - ghnotify.app) > "${ARCHIVE}.tmp"
+    mv "${ARCHIVE}.tmp" "$ARCHIVE"
+elif [[ -f "$BINARY" ]]; then
     echo "notarize.sh: stapling '$BINARY'..." >&2
     xcrun stapler staple "$BINARY"
-    # Replace the unstabled binary in the archive with the stapled one.
     (cd "$TMPDIR" && zip -j - ghnotify) > "${ARCHIVE}.tmp"
     mv "${ARCHIVE}.tmp" "$ARCHIVE"
 fi

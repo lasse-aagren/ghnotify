@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"log"
 
+	"github.com/gen2brain/beeep"
+
 	"github.com/boyvinall/ghnotify/internal/config"
 	"github.com/boyvinall/ghnotify/internal/github"
 	"github.com/boyvinall/ghnotify/internal/poller"
-	"github.com/gen2brain/beeep"
 )
 
 // Notifier fires OS notifications for PR changes that the user has opted into.

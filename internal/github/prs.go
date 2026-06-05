@@ -131,6 +131,7 @@ func (c *Client) fetchPRDetail(ctx context.Context, owner, repo string, issue *g
 		Title:        ghPR.GetTitle(),
 		URL:          ghPR.GetHTMLURL(),
 		Author:       ghPR.GetUser().GetLogin(),
+		HeadRef:      ghPR.GetHead().GetRef(),
 		IsDraft:      ghPR.GetDraft(),
 		ReviewState:  aggregateReviewState(reviews),
 		CIStatus:     ciStatus,
@@ -170,7 +171,7 @@ func (c *Client) fetchCIStatus(ctx context.Context, owner, repo, sha string) CIS
 	}()
 	wg.Wait()
 
-	return aggregateCIStatus(legacyState, runs)
+	return aggregateCIStatus(repo, legacyState, runs)
 }
 
 // --- aggregation helpers -----------------------------------------------------
@@ -206,7 +207,7 @@ func aggregateReviewState(reviews []*ghapi.PullRequestReview) ReviewState {
 	return ReviewPending
 }
 
-func aggregateCIStatus(legacyState string, runs *ghapi.ListCheckRunsResults) CIStatus {
+func aggregateCIStatus(repo, legacyState string, runs *ghapi.ListCheckRunsResults) CIStatus {
 	failing, pending, passing := false, false, false
 
 	switch legacyState {
@@ -220,6 +221,12 @@ func aggregateCIStatus(legacyState string, runs *ghapi.ListCheckRunsResults) CIS
 
 	if runs != nil {
 		for _, run := range runs.CheckRuns {
+			slog.Debug("check run",
+				"repo", repo,
+				"name", run.GetName(),
+				"status", run.GetStatus(),
+				"conclusion", run.GetConclusion(),
+			)
 			switch run.GetConclusion() {
 			case "success", "skipped", "neutral":
 				passing = true

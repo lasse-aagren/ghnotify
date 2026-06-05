@@ -10,14 +10,14 @@ import (
 type ChangeKind int
 
 const (
-	ChangeNone        ChangeKind = iota
-	ChangeAdded                  // PR appeared (new or newly matched the query)
-	ChangeRemoved                // PR closed/merged or no longer matches
-	ChangeReview                 // review state changed
-	ChangeCIStatus               // CI result changed
-	ChangeMergeable              // merge readiness changed
-	ChangeComments               // comment count changed
-	ChangeUpdated                // anything else (title, draft flag, etc.)
+	ChangeNone      ChangeKind = iota
+	ChangeAdded                // PR appeared (new or newly matched the query)
+	ChangeRemoved              // PR closed/merged or no longer matches
+	ChangeReview               // review state changed
+	ChangeCIStatus             // CI result changed
+	ChangeMergeable            // merge readiness changed
+	ChangeComments             // comment count changed
+	ChangeUpdated              // anything else (title, draft flag, etc.)
 )
 
 // Change describes one PR mutation detected by a poll cycle.

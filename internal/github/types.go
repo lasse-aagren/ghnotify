@@ -47,6 +47,7 @@ type PR struct {
 	ReviewState  ReviewState
 	CIStatus     CIStatus
 	Merge        Mergeability
+	HeadRef      string
 	CommentCount int
 	UpdatedAt    time.Time
 }

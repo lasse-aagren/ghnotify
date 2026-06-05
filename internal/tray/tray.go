@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os/exec"
 
+	"github.com/getlantern/systray"
+
 	"github.com/boyvinall/ghnotify/internal/auth"
 	"github.com/boyvinall/ghnotify/internal/config"
 	"github.com/boyvinall/ghnotify/internal/notify"
 	"github.com/boyvinall/ghnotify/internal/poller"
 	"github.com/boyvinall/ghnotify/internal/updater"
-	"github.com/getlantern/systray"
 )
 
 // Options bundles all dependencies for the tray.
@@ -30,7 +31,7 @@ func Run(opts Options) {
 
 func onReady(opts Options) func() {
 	return func() {
-		systray.SetIcon(iconBytes())
+		systray.SetTemplateIcon(iconBytes(), iconBytes())
 		systray.SetTooltip("ghnotify — GitHub PR monitor")
 
 		// My PRs section — all slots created BEFORE the separator.
@@ -64,9 +65,9 @@ func onReady(opts Options) func() {
 			myCount := myList.update(opts.Poll.MyPRs())
 			revCount := reviewList.update(opts.Poll.ReviewRequests())
 			if myCount+revCount > 0 {
-				systray.SetIcon(iconActiveBytes())
+				systray.SetTemplateIcon(iconActiveBytes(), iconActiveBytes())
 			} else {
-				systray.SetIcon(iconBytes())
+				systray.SetTemplateIcon(iconBytes(), iconBytes())
 			}
 			opts.Notif.HandleChanges(changes)
 		})

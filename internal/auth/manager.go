@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"log/slog"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -20,10 +21,29 @@ func NewManager() *Manager {
 	return &Manager{}
 }
 
+// ghBin returns the path to the gh CLI binary.
+// When ghnotify runs as a .app bundle launched from Finder or Spotlight, macOS
+// provides a minimal PATH that omits Homebrew directories, so exec.LookPath("gh")
+// fails. We fall back to the well-known Homebrew installation paths.
+func ghBin() string {
+	if path, err := exec.LookPath("gh"); err == nil {
+		return path
+	}
+	for _, p := range []string{
+		"/opt/homebrew/bin/gh", // Apple Silicon
+		"/usr/local/bin/gh",    // Intel
+	} {
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return "gh"
+}
+
 // Servers returns all hosts currently authenticated with gh.
 func (m *Manager) Servers() []Server {
 	slog.Debug("discovering gh servers")
-	out, err := exec.Command("gh", "auth", "status", "--json", "hosts").Output()
+	out, err := exec.Command(ghBin(), "auth", "status", "--json", "hosts").Output()
 	if err != nil {
 		slog.Debug("gh auth status failed", "err", err)
 		return nil
@@ -35,7 +55,7 @@ func (m *Manager) Servers() []Server {
 
 // GetToken returns the token for host from the gh CLI.
 func (m *Manager) GetToken(host string) (string, error) {
-	out, err := exec.Command("gh", "auth", "token", "--hostname", host).Output()
+	out, err := exec.Command(ghBin(), "auth", "token", "--hostname", host).Output()
 	if err != nil {
 		return "", err
 	}

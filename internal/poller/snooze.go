@@ -17,7 +17,7 @@ const (
 // SnoozeEntry records the snooze state for one PR.
 type SnoozeEntry struct {
 	Mode            string    `json:"mode"`
-	ExpiresAt       time.Time `json:"expires_at,omitempty"`        // for until_time
+	ExpiresAt       time.Time `json:"expires_at,omitempty"`          // for until_time
 	SnapshotUpdated time.Time `json:"snapshot_updated_at,omitempty"` // for until_change
 }
 

@@ -6,13 +6,14 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/urfave/cli/v3"
+
 	"github.com/boyvinall/ghnotify/internal/auth"
 	"github.com/boyvinall/ghnotify/internal/config"
 	"github.com/boyvinall/ghnotify/internal/notify"
 	"github.com/boyvinall/ghnotify/internal/poller"
 	"github.com/boyvinall/ghnotify/internal/tray"
 	"github.com/boyvinall/ghnotify/internal/updater"
-	"github.com/urfave/cli/v3"
 )
 
 var version = "dev"

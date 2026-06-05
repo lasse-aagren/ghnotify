@@ -12,9 +12,9 @@ import (
 
 // Client wraps go-github with our host information.
 type Client struct {
-	inner         *ghapi.Client
-	host          string
-	excludeQuery  string // pre-built "-author:X -author:Y" fragment
+	inner        *ghapi.Client
+	host         string
+	excludeQuery string // pre-built "-author:X -author:Y" fragment
 }
 
 // NewClient returns a token-authenticated client for host.

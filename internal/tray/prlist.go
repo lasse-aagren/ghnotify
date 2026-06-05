@@ -5,10 +5,11 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/getlantern/systray"
+
 	"github.com/boyvinall/ghnotify/internal/auth"
 	"github.com/boyvinall/ghnotify/internal/github"
 	"github.com/boyvinall/ghnotify/internal/poller"
-	"github.com/getlantern/systray"
 )
 
 // prList manages one PR section (My PRs or Review Requests) in the menubar.
