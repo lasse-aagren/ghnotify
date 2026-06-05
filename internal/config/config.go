@@ -1,25 +1,13 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/BurntSushi/toml"
 )
-
-type AuthType string
-
-const (
-	AuthTypeOAuth AuthType = "oauth"
-	AuthTypePAT   AuthType = "pat"
-)
-
-type ServerConfig struct {
-	Host     string   `toml:"host"`
-	AuthType AuthType `toml:"auth_type"`
-	ClientID string   `toml:"client_id,omitempty"`
-}
 
 type NotificationConfig struct {
 	NewReviewRequests bool `toml:"new_review_requests"`
@@ -31,15 +19,31 @@ type NotificationConfig struct {
 
 type AppConfig struct {
 	PollInterval     string             `toml:"poll_interval"`
+	MaxPRAge         string             `toml:"max_pr_age"`
 	MaxPRsPerSection int                `toml:"max_prs_per_section"`
+	ExcludeAuthors   []string           `toml:"exclude_authors"`
 	Notifications    NotificationConfig `toml:"notifications"`
-	Servers          []ServerConfig     `toml:"servers"`
+}
+
+// ParseMaxPRAge returns the configured PR age limit as a duration.
+// Returns zero if the value is unset, empty, or parses to zero — meaning no filter.
+func (c *AppConfig) ParseMaxPRAge() time.Duration {
+	if c.MaxPRAge == "" {
+		return 0
+	}
+	d, err := time.ParseDuration(c.MaxPRAge)
+	if err != nil || d <= 0 {
+		return 0
+	}
+	return d
 }
 
 func Default() *AppConfig {
 	return &AppConfig{
 		PollInterval:     "60s",
+		MaxPRAge:         "168h", // 1 week
 		MaxPRsPerSection: 20,
+		ExcludeAuthors:   []string{"app/renovate", "app/unity-renovate"},
 		Notifications: NotificationConfig{
 			NewReviewRequests: true,
 			PRApproved:        true,
@@ -58,7 +62,7 @@ func Load() (*AppConfig, error) {
 	cfg := Default()
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		if saveErr := cfg.save(path); saveErr != nil {
-			log.Printf("warning: could not write default config: %v", saveErr)
+			slog.Warn("could not write default config", "err", saveErr)
 		}
 		return cfg, nil
 	}

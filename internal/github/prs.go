@@ -2,57 +2,122 @@ package github
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"strings"
+	"sync"
+	"time"
 
 	ghapi "github.com/google/go-github/v72/github"
 )
 
+// maxConcurrentPRs caps the number of PRs fetched in parallel per search query.
+const maxConcurrentPRs = 5
+
 // FetchMyPRs returns all open pull requests authored by the authenticated user.
-func (c *Client) FetchMyPRs(ctx context.Context) ([]PR, error) {
-	return c.searchPRs(ctx, "is:pr is:open author:@me archived:false")
+// since, if non-zero, restricts results to PRs updated at or after that time.
+func (c *Client) FetchMyPRs(ctx context.Context, since time.Time) ([]PR, error) {
+	return c.searchPRs(ctx, "is:pr is:open author:@me archived:false", since)
 }
 
 // FetchReviewRequests returns all open PRs where the authenticated user is a
 // requested reviewer.
-func (c *Client) FetchReviewRequests(ctx context.Context) ([]PR, error) {
-	return c.searchPRs(ctx, "is:pr is:open review-requested:@me archived:false")
+// since, if non-zero, restricts results to PRs updated at or after that time.
+func (c *Client) FetchReviewRequests(ctx context.Context, since time.Time) ([]PR, error) {
+	return c.searchPRs(ctx, "is:pr is:open review-requested:@me archived:false", since)
 }
 
-func (c *Client) searchPRs(ctx context.Context, query string) ([]PR, error) {
+func (c *Client) searchPRs(ctx context.Context, query string, since time.Time) ([]PR, error) {
+	if c.excludeQuery != "" {
+		query += " " + c.excludeQuery
+	}
+	if !since.IsZero() {
+		query += " updated:>" + since.UTC().Format("2006-01-02")
+	}
 	opts := &ghapi.SearchOptions{
 		ListOptions: ghapi.ListOptions{PerPage: 100},
 	}
+	slog.Debug("searching PRs", "host", c.host, "query", query)
 	result, _, err := c.inner.Search.Issues(ctx, query, opts)
 	if err != nil {
 		return nil, err
 	}
+	slog.Debug("search returned issues", "host", c.host, "count", result.GetTotal())
 
-	var prs []PR
-	for _, issue := range result.Issues {
+	type entry struct {
+		pr  *PR
+		idx int
+	}
+
+	sem := make(chan struct{}, maxConcurrentPRs)
+	ch := make(chan entry, len(result.Issues))
+	var wg sync.WaitGroup
+
+	for i, issue := range result.Issues {
 		owner, repo := parseOwnerRepo(issue.GetRepositoryURL())
 		if owner == "" {
 			continue
 		}
-		pr, err := c.fetchPRDetail(ctx, owner, repo, issue.GetNumber())
-		if err != nil {
-			log.Printf("ghnotify: fetch PR detail %s/%s#%d: %v", owner, repo, issue.GetNumber(), err)
-			continue
+		wg.Add(1)
+		go func(idx int, issue *ghapi.Issue, owner, repo string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			slog.Debug("fetching PR detail", "host", c.host, "owner", owner, "repo", repo, "number", issue.GetNumber())
+			pr, err := c.fetchPRDetail(ctx, owner, repo, issue)
+			if err != nil {
+				slog.Warn("fetch PR detail failed", "owner", owner, "repo", repo, "number", issue.GetNumber(), "err", err)
+				return
+			}
+			slog.Debug("fetched PR detail", "host", c.host, "owner", owner, "repo", repo, "number", pr.Number, "title", pr.Title, "draft", pr.IsDraft, "ci", pr.CIStatus, "review", pr.ReviewState)
+			ch <- entry{pr, idx}
+		}(i, issue, owner, repo)
+	}
+
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
+
+	// Collect and re-order by original search rank.
+	ordered := make([]*PR, len(result.Issues))
+	for e := range ch {
+		ordered[e.idx] = e.pr
+	}
+	var prs []PR
+	for _, pr := range ordered {
+		if pr != nil {
+			prs = append(prs, *pr)
 		}
-		prs = append(prs, *pr)
 	}
 	return prs, nil
 }
 
-func (c *Client) fetchPRDetail(ctx context.Context, owner, repo string, number int) (*PR, error) {
-	ghPR, _, err := c.inner.PullRequests.Get(ctx, owner, repo, number)
-	if err != nil {
-		return nil, err
-	}
+func (c *Client) fetchPRDetail(ctx context.Context, owner, repo string, issue *ghapi.Issue) (*PR, error) {
+	number := issue.GetNumber()
 
-	reviews, _, err := c.inner.PullRequests.ListReviews(ctx, owner, repo, number, nil)
-	if err != nil {
-		log.Printf("ghnotify: list reviews %s/%s#%d: %v", owner, repo, number, err)
+	// Fetch PR metadata and review list concurrently — neither depends on the other.
+	var ghPR *ghapi.PullRequest
+	var reviews []*ghapi.PullRequestReview
+	var getPRErr, listReviewsErr error
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		ghPR, _, getPRErr = c.inner.PullRequests.Get(ctx, owner, repo, number)
+	}()
+	go func() {
+		defer wg.Done()
+		reviews, _, listReviewsErr = c.inner.PullRequests.ListReviews(ctx, owner, repo, number, nil)
+	}()
+	wg.Wait()
+
+	if getPRErr != nil {
+		return nil, getPRErr
+	}
+	if listReviewsErr != nil {
+		slog.Warn("list reviews failed", "owner", owner, "repo", repo, "number", number, "err", listReviewsErr)
 	}
 
 	sha := ghPR.GetHead().GetSHA()
@@ -81,17 +146,29 @@ func (c *Client) fetchCIStatus(ctx context.Context, owner, repo, sha string) CIS
 		return CIUnknown
 	}
 
+	// Fetch legacy statuses and check runs concurrently.
 	var legacyState string
-	combined, _, err := c.inner.Repositories.GetCombinedStatus(ctx, owner, repo, sha, nil)
-	if err == nil {
-		legacyState = combined.GetState()
-	}
+	var runs *ghapi.ListCheckRunsResults
 
-	runs, _, err := c.inner.Checks.ListCheckRunsForRef(ctx, owner, repo, sha,
-		&ghapi.ListCheckRunsOptions{ListOptions: ghapi.ListOptions{PerPage: 100}})
-	if err != nil {
-		runs = nil
-	}
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		combined, _, err := c.inner.Repositories.GetCombinedStatus(ctx, owner, repo, sha, nil)
+		if err == nil {
+			legacyState = combined.GetState()
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		var err error
+		runs, _, err = c.inner.Checks.ListCheckRunsForRef(ctx, owner, repo, sha,
+			&ghapi.ListCheckRunsOptions{ListOptions: ghapi.ListOptions{PerPage: 100}})
+		if err != nil {
+			runs = nil
+		}
+	}()
+	wg.Wait()
 
 	return aggregateCIStatus(legacyState, runs)
 }
@@ -185,15 +262,13 @@ func parseMergeability(pr *ghapi.PullRequest) Mergeability {
 // parseOwnerRepo extracts owner and repo from a GitHub repository URL.
 // Works for both github.com and GHE: ".../repos/owner/repo"
 func parseOwnerRepo(repoURL string) (owner, repo string) {
-	const marker = "/repos/"
-	idx := strings.Index(repoURL, marker)
-	if idx < 0 {
+	_, rest, ok := strings.Cut(repoURL, "/repos/")
+	if !ok {
 		return "", ""
 	}
-	rest := repoURL[idx+len(marker):]
-	parts := strings.SplitN(rest, "/", 2)
-	if len(parts) != 2 {
+	owner, repo, ok = strings.Cut(rest, "/")
+	if !ok {
 		return "", ""
 	}
-	return parts[0], strings.TrimRight(parts[1], "/")
+	return owner, strings.TrimRight(repo, "/")
 }

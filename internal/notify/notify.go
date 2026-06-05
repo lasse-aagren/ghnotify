@@ -14,14 +14,15 @@ import (
 
 // Notifier fires OS notifications for PR changes that the user has opted into.
 type Notifier struct {
-	cfg *config.NotificationConfig
+	cfg    *config.NotificationConfig
+	snooze *poller.SnoozeStore
 }
 
-// NewNotifier creates a Notifier backed by cfg. cfg may be mutated at runtime
-// (e.g., from Preferences) as long as reads are not concurrent with writes;
-// for v1 this is safe because prefs are only changed at app restart.
-func NewNotifier(cfg *config.NotificationConfig) *Notifier {
-	return &Notifier{cfg: cfg}
+// NewNotifier creates a Notifier backed by cfg and snooze. cfg may be mutated
+// at runtime (e.g., from Preferences) as long as reads are not concurrent with
+// writes; for v1 this is safe because prefs are only changed at app restart.
+func NewNotifier(cfg *config.NotificationConfig, snooze *poller.SnoozeStore) *Notifier {
+	return &Notifier{cfg: cfg, snooze: snooze}
 }
 
 // HandleChanges processes a batch of changes from one poll cycle.
@@ -32,6 +33,9 @@ func (n *Notifier) HandleChanges(changes []poller.Change) {
 }
 
 func (n *Notifier) dispatch(c poller.Change) {
+	if n.snooze.IsSnoozed(c.PR.Key(), c.PR.UpdatedAt) {
+		return
+	}
 	title, body, ok := n.format(c)
 	if !ok {
 		return

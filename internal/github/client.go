@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 
 	ghapi "github.com/google/go-github/v72/github"
 	"golang.org/x/oauth2"
@@ -11,13 +12,15 @@ import (
 
 // Client wraps go-github with our host information.
 type Client struct {
-	inner *ghapi.Client
-	host  string
+	inner         *ghapi.Client
+	host          string
+	excludeQuery  string // pre-built "-author:X -author:Y" fragment
 }
 
 // NewClient returns a token-authenticated client for host.
 // Use "github.com" for github.com or a bare hostname for GitHub Enterprise.
-func NewClient(host, token string) *Client {
+// excludeAuthors is a list of author logins (e.g. "app/renovate") to exclude from queries.
+func NewClient(host, token string, excludeAuthors []string) *Client {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
 	tc := oauth2.NewClient(context.Background(), ts)
 
@@ -30,7 +33,14 @@ func NewClient(host, token string) *Client {
 			"https://"+host+"/api/uploads/",
 		)
 	}
-	return &Client{inner: inner, host: host}
+
+	parts := make([]string, 0, len(excludeAuthors))
+	for _, a := range excludeAuthors {
+		if a != "" {
+			parts = append(parts, "-author:"+a)
+		}
+	}
+	return &Client{inner: inner, host: host, excludeQuery: strings.Join(parts, " ")}
 }
 
 // IsUnauthorized reports whether err is a 401 from the GitHub API.

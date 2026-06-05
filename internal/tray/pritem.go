@@ -36,12 +36,15 @@ type prItem struct {
 	snooze *poller.SnoozeStore
 }
 
-func newPRItem(mgr *auth.Manager, snooze *poller.SnoozeStore) *prItem {
+func newPRItem(mgr *auth.Manager, snooze *poller.SnoozeStore, showApprove bool) *prItem {
 	it := &prItem{mgr: mgr, snooze: snooze}
 	it.mItem = systray.AddMenuItem("", "")
 	it.mOpen = it.mItem.AddSubMenuItem("Open in Browser", "")
 	it.mCopy = it.mItem.AddSubMenuItem("Copy URL", "")
 	it.mApprove = it.mItem.AddSubMenuItem("Approve", "")
+	if !showApprove {
+		it.mApprove.Hide()
+	}
 	it.mSnooze = it.mItem.AddSubMenuItem("Snooze…", "")
 	it.mSnoozeChange = it.mSnooze.AddSubMenuItem("Until next change", "")
 	it.mSnooze1h = it.mSnooze.AddSubMenuItem("1 hour", "")
@@ -132,7 +135,7 @@ func (it *prItem) doApprove(pr *github.PR) {
 		log.Printf("ghnotify: approve: no token for %s", pr.Server)
 		return
 	}
-	client := github.NewClient(pr.Server, token)
+	client := github.NewClient(pr.Server, token, nil)
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
@@ -153,7 +156,7 @@ func formatPRTitle(pr github.PR) string {
 	if len(title) > 50 {
 		title = title[:47] + "…"
 	}
-	return fmt.Sprintf("[%s][%s]  %s › %s  #%d  %s", ci, rev, pr.Server, pr.Repo, pr.Number, title)
+	return fmt.Sprintf("[%s][%s] %s #%d %s", ci, rev, pr.Repo, pr.Number, title)
 }
 
 func ciGlyph(s github.CIStatus) string {

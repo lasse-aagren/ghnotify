@@ -34,20 +34,14 @@ func onReady(opts Options) func() {
 		systray.SetTooltip("ghnotify — GitHub PR monitor")
 
 		// My PRs section — all slots created BEFORE the separator.
-		myList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "My Pull Requests")
+		myList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "My Pull Requests", false)
 		myList.build()
 
 		systray.AddSeparator()
 
 		// Review Requests section — all slots created BEFORE the separator.
-		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "Review Requests")
+		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "Review Requests", true)
 		reviewList.build()
-
-		systray.AddSeparator()
-
-		// Server management.
-		ss := newServerSection(opts.Auth, opts.Config, opts.Poll)
-		ss.build()
 
 		systray.AddSeparator()
 

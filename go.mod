@@ -8,13 +8,11 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/google/go-github/v72 v72.0.0
 	github.com/urfave/cli/v3 v3.9.0
-	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/oauth2 v0.36.0
 )
 
 require (
 	git.sr.ht/~jackmordaunt/go-toast v1.1.2 // indirect
-	github.com/danieljoos/wincred v1.2.3 // indirect
 	github.com/esiqveland/notify v0.13.3 // indirect
 	github.com/getlantern/context v0.0.0-20190109183933-c447772a6520 // indirect
 	github.com/getlantern/errors v0.0.0-20190325191628-abdb3e3e36f7 // indirect

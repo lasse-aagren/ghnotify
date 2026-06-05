@@ -14,18 +14,19 @@ import (
 // prList manages one PR section (My PRs or Review Requests) in the menubar.
 // Slots are pre-created at build time; Show/Hide is used to manage visibility.
 type prList struct {
-	mu       sync.Mutex
-	header   *systray.MenuItem // "My Pull Requests (N)" — disabled
-	slots    []*prItem         // pre-created pool, one per max-allowed PR
-	mMore    *systray.MenuItem // "… and N more" (shown when truncated)
-	maxItems int
-	label    string // "My Pull Requests" or "Review Requests"
-	mgr      *auth.Manager
-	snooze   *poller.SnoozeStore
+	mu          sync.Mutex
+	header      *systray.MenuItem // "My Pull Requests (N)" — disabled
+	slots       []*prItem         // pre-created pool, one per max-allowed PR
+	mMore       *systray.MenuItem // "… and N more" (shown when truncated)
+	maxItems    int
+	label       string // "My Pull Requests" or "Review Requests"
+	showApprove bool
+	mgr         *auth.Manager
+	snooze      *poller.SnoozeStore
 }
 
-func newPRList(maxItems int, mgr *auth.Manager, snooze *poller.SnoozeStore, label string) *prList {
-	return &prList{maxItems: maxItems, label: label, mgr: mgr, snooze: snooze}
+func newPRList(maxItems int, mgr *auth.Manager, snooze *poller.SnoozeStore, label string, showApprove bool) *prList {
+	return &prList{maxItems: maxItems, label: label, showApprove: showApprove, mgr: mgr, snooze: snooze}
 }
 
 // build creates the header and all pre-allocated slot items in the menu.
@@ -36,7 +37,7 @@ func (l *prList) build() {
 
 	l.slots = make([]*prItem, l.maxItems)
 	for i := range l.slots {
-		l.slots[i] = newPRItem(l.mgr, l.snooze)
+		l.slots[i] = newPRItem(l.mgr, l.snooze, l.showApprove)
 	}
 
 	l.mMore = systray.AddMenuItem("", "")
@@ -55,16 +56,9 @@ func (l *prList) update(prs []github.PR) int {
 		}
 	}
 
-	// Sort: server → repo → number.
+	// Sort: most recently updated first.
 	sort.Slice(visible, func(i, j int) bool {
-		a, b := visible[i], visible[j]
-		if a.Server != b.Server {
-			return a.Server < b.Server
-		}
-		if a.Repo != b.Repo {
-			return a.Repo < b.Repo
-		}
-		return a.Number < b.Number
+		return visible[i].UpdatedAt.After(visible[j].UpdatedAt)
 	})
 
 	total := len(visible)

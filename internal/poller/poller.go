@@ -2,7 +2,7 @@ package poller
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"math/rand"
 	"sync"
 	"time"
@@ -46,20 +46,24 @@ func (m *Manager) OnChange(fn func([]Change)) {
 	m.onChange = fn
 }
 
-// MyPRs returns a current snapshot of all tracked PRs authored by the user.
+// MyPRs returns a current snapshot of all tracked PRs authored by the user,
+// filtered to exclude PRs older than the configured max age.
 func (m *Manager) MyPRs() []github.PR {
-	return m.store.MyPRs()
+	return filterByAge(m.store.MyPRs(), m.prAgeCutoff())
 }
 
-// ReviewRequests returns a current snapshot of all tracked review requests.
+// ReviewRequests returns a current snapshot of all tracked review requests,
+// filtered to exclude PRs older than the configured max age.
 func (m *Manager) ReviewRequests() []github.PR {
-	return m.store.ReviewRequests()
+	return filterByAge(m.store.ReviewRequests(), m.prAgeCutoff())
 }
 
-// Start launches poll goroutines for all configured servers.
+// Start launches poll goroutines for all gh-authenticated hosts.
 func (m *Manager) Start() {
-	for _, sc := range m.cfg.Servers {
-		m.startServer(sc.Host)
+	servers := m.authMgr.Servers()
+	slog.Debug("starting poller", "servers", len(servers))
+	for _, s := range servers {
+		m.startServer(s.Host)
 	}
 }
 
@@ -103,6 +107,7 @@ func (m *Manager) startServer(host string) {
 	if _, running := m.cancels[host]; running {
 		return
 	}
+	slog.Debug("starting server poll loop", "host", host)
 	ctx, cancel := context.WithCancel(m.rootCtx)
 	m.cancels[host] = cancel
 
@@ -114,6 +119,7 @@ func (m *Manager) runServerLoop(ctx context.Context, host string) {
 	defer m.wg.Done()
 
 	interval := m.pollInterval()
+	slog.Debug("poll loop started", "host", host, "interval", interval)
 
 	// Poll immediately on start.
 	m.pollServer(ctx, host)
@@ -121,8 +127,10 @@ func (m *Manager) runServerLoop(ctx context.Context, host string) {
 	for {
 		select {
 		case <-ctx.Done():
+			slog.Debug("poll loop stopped", "host", host)
 			return
 		case <-time.After(jitter(interval)):
+			slog.Debug("poll interval elapsed", "host", host)
 			m.pollServer(ctx, host)
 		}
 	}
@@ -131,35 +139,29 @@ func (m *Manager) runServerLoop(ctx context.Context, host string) {
 func (m *Manager) pollServer(ctx context.Context, host string) {
 	token, err := m.authMgr.GetToken(host)
 	if err != nil || token == "" {
-		return // not authenticated yet; skip silently
+		return // not authenticated; skip silently
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	client := github.NewClient(host, token)
+	slog.Debug("polling server", "host", host)
+	client := github.NewClient(host, token, m.cfg.ExcludeAuthors)
 
-	myPRs, err := client.FetchMyPRs(tctx)
+	since := m.prAgeCutoff()
+
+	myPRs, err := client.FetchMyPRs(tctx, since)
 	if err != nil {
-		if github.IsUnauthorized(err) {
-			if refreshErr := m.authMgr.RefreshToken(host); refreshErr == nil {
-				if token, err = m.authMgr.GetToken(host); err == nil {
-					client = github.NewClient(host, token)
-					myPRs, err = client.FetchMyPRs(tctx)
-				}
-			}
-		}
-		if err != nil {
-			log.Printf("ghnotify: poll %s (my PRs): %v", host, err)
-		}
+		slog.Error("poll failed", "host", host, "query", "my PRs", "err", err)
 	}
 
-	reviews, err := client.FetchReviewRequests(tctx)
+	reviews, err := client.FetchReviewRequests(tctx, since)
 	if err != nil {
-		log.Printf("ghnotify: poll %s (review requests): %v", host, err)
+		slog.Error("poll failed", "host", host, "query", "review requests", "err", err)
 	}
 
 	changes := m.store.Update(host, myPRs, reviews)
+	slog.Debug("poll complete", "host", host, "myPRs", len(myPRs), "reviewRequests", len(reviews), "changes", len(changes))
 	if len(changes) > 0 && m.onChange != nil {
 		m.onChange(changes)
 	}
@@ -168,7 +170,7 @@ func (m *Manager) pollServer(ctx context.Context, host string) {
 func (m *Manager) pollInterval() time.Duration {
 	d, err := time.ParseDuration(m.cfg.PollInterval)
 	if err != nil || d < 10*time.Second {
-		return 60 * time.Second
+		return 300 * time.Second
 	}
 	return d
 }
@@ -179,4 +181,27 @@ func jitter(d time.Duration) time.Duration {
 		return d
 	}
 	return d + time.Duration(rand.Int63n(spread*2)-spread)
+}
+
+// prAgeCutoff returns the earliest UpdatedAt time a PR must have to be shown.
+// Returns zero time if no max age is configured.
+func (m *Manager) prAgeCutoff() time.Time {
+	age := m.cfg.ParseMaxPRAge()
+	if age <= 0 {
+		return time.Time{}
+	}
+	return time.Now().Add(-age)
+}
+
+func filterByAge(prs []github.PR, cutoff time.Time) []github.PR {
+	if cutoff.IsZero() {
+		return prs
+	}
+	out := prs[:0:0]
+	for _, pr := range prs {
+		if !pr.UpdatedAt.Before(cutoff) {
+			out = append(out, pr)
+		}
+	}
+	return out
 }

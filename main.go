@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/boyvinall/ghnotify/internal/auth"
@@ -22,14 +22,29 @@ func main() {
 		Name:    "ghnotify",
 		Usage:   "GitHub PR monitor in your menubar",
 		Version: version,
-		Action:  run,
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:    "level",
+				Aliases: []string{"l"},
+				Value:   "info",
+				Usage:   "log level (debug, info, warn, error)",
+			},
+		},
+		Action: run,
 	}
 	if err := app.Run(context.Background(), os.Args); err != nil {
-		log.Fatal(err)
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
 	}
 }
 
 func run(ctx context.Context, cmd *cli.Command) error {
+	var level slog.Level
+	if err := level.UnmarshalText([]byte(cmd.String("level"))); err != nil {
+		return fmt.Errorf("invalid log level %q: %w", cmd.String("level"), err)
+	}
+	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: level})))
+
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
@@ -40,7 +55,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("snooze path: %w", err)
 	}
 
-	mgr := auth.NewManager(cfg)
+	mgr := auth.NewManager()
 	snooze := poller.NewSnoozeStore(snoozePath)
 	poll := poller.NewManager(mgr, cfg)
 	poll.Start()
@@ -51,7 +66,7 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		Auth:    mgr,
 		Poll:    poll,
 		Snooze:  snooze,
-		Notif:   notify.NewNotifier(&cfg.Notifications),
+		Notif:   notify.NewNotifier(&cfg.Notifications, snooze),
 		Updater: updater.NewUpdater(version),
 	})
 	return nil
