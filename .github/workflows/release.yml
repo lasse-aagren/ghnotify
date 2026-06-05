@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write   # needed to create GitHub Releases and upload assets
+
+jobs:
+  release:
+    runs-on: macos-14        # Apple Silicon; CGO + codesign require macOS
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0     # goreleaser needs full history for changelog
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # ── Code-signing certificate (optional) ──────────────────────────────
+      # Store your Developer ID .p12 as a base64 secret:
+      #   base64 -i cert.p12 | pbcopy  → secret MACOS_CERTIFICATE
+      # Also set MACOS_CERTIFICATE_PWD (p12 export password) and
+      # CODESIGN_IDENTITY (e.g. "Developer ID Application: You (TEAMID)").
+      - name: Import code-signing certificate
+        if: env.MACOS_CERTIFICATE != ''
+        env:
+          MACOS_CERTIFICATE:     ${{ secrets.MACOS_CERTIFICATE }}
+          MACOS_CERTIFICATE_PWD: ${{ secrets.MACOS_CERTIFICATE_PWD }}
+        run: |
+          echo "$MACOS_CERTIFICATE" | base64 --decode -o certificate.p12
+          security create-keychain -p "" build.keychain
+          security import certificate.p12 \
+              -k build.keychain \
+              -P "$MACOS_CERTIFICATE_PWD" \
+              -T /usr/bin/codesign
+          security list-keychains -s build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "" build.keychain
+          security set-key-partition-list \
+              -S apple-tool:,apple: -s -k "" build.keychain
+
+      # ── Build + archive (publish deferred so we can sign first) ──────────
+      - name: Build with goreleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --skip=publish --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── Sign + notarize + re-archive ─────────────────────────────────────
+      # scripts/codesign.sh no-ops when CODESIGN_IDENTITY is absent.
+      # scripts/notarize.sh no-ops when APPLE_ID / APP_PASSWORD / TEAM_ID
+      # are absent.
+      - name: Sign, notarize, and re-archive
+        env:
+          CODESIGN_IDENTITY: ${{ secrets.CODESIGN_IDENTITY }}
+          APPLE_ID:          ${{ secrets.APPLE_ID }}
+          APP_PASSWORD:      ${{ secrets.APP_PASSWORD }}
+          TEAM_ID:           ${{ secrets.TEAM_ID }}
+        run: |
+          set -euo pipefail
+          chmod +x scripts/codesign.sh scripts/notarize.sh
+
+          for zipfile in dist/*.zip; do
+            echo "Processing $zipfile..."
+            tmpdir=$(mktemp -d)
+
+            unzip -q "$zipfile" -d "$tmpdir"
+
+            # Sign the binary (no-op if cert absent).
+            ./scripts/codesign.sh "$tmpdir/ghnotify"
+
+            # Re-zip with (possibly) signed binary.
+            (cd "$tmpdir" && zip -j - ghnotify) > "${zipfile}.new"
+            mv "${zipfile}.new" "$zipfile"
+
+            rm -rf "$tmpdir"
+
+            # Notarize the re-zipped archive (no-op if creds absent).
+            ./scripts/notarize.sh "$zipfile"
+          done
+
+          # Regenerate checksums after re-archiving.
+          cd dist && sha256sum *.zip > checksums.txt
+
+      # ── Publish the (now signed) release ─────────────────────────────────
+      - name: Publish release
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --skip=build,validate
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

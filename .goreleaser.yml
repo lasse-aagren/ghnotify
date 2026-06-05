@@ -1,0 +1,71 @@
+version: 2
+
+project_name: ghnotify
+
+before:
+  hooks:
+    - go mod tidy
+
+# Build separate amd64 and arm64 binaries; universal_binaries combines them.
+# CGO is required by getlantern/systray on macOS.
+builds:
+  - id: ghnotify-amd64
+    main: .
+    binary: ghnotify
+    goos: [darwin]
+    goarch: [amd64]
+    env:
+      - CGO_ENABLED=1
+      - CGO_CFLAGS=-arch x86_64
+      - CGO_LDFLAGS=-arch x86_64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+  - id: ghnotify-arm64
+    main: .
+    binary: ghnotify
+    goos: [darwin]
+    goarch: [arm64]
+    env:
+      - CGO_ENABLED=1
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+
+# Combine amd64 + arm64 into a single universal binary.
+# replace:true overwrites both per-arch artifacts with the universal binary.
+universal_binaries:
+  - ids:
+      - ghnotify-amd64
+      - ghnotify-arm64
+    replace: true
+
+# Archive only the arm64 artifact (which is now the universal binary after replace).
+archives:
+  - ids: [ghnotify-arm64]
+    formats: [zip]
+    name_template: "{{ .ProjectName }}_darwin_universal"
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+release:
+  github:
+    owner: boyvinall
+    name: ghnotify
+  draft: false
+  prerelease: auto
+  # Release notes are generated from the changelog below.
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
