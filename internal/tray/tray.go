@@ -65,9 +65,10 @@ func onReady(opts Options) func() {
 			myCount := myList.update(opts.Poll.MyPRs())
 			revCount := reviewList.update(opts.Poll.ReviewRequests())
 			if myCount+revCount > 0 {
-				systray.SetTemplateIcon(iconActiveBytes(), iconActiveBytes())
+				systray.SetIcon(iconActiveBytes())
 			} else {
-				systray.SetTemplateIcon(iconBytes(), iconBytes())
+				// systray.SetTemplateIcon(iconBytes(), iconBytes())
+				systray.SetIcon(iconBytes())
 			}
 			opts.Notif.HandleChanges(changes)
 		})

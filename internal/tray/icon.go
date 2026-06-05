@@ -2,10 +2,10 @@ package tray
 
 import _ "embed"
 
-//go:embed icon_idle.png
+//go:embed icon.png
 var idlePNG []byte
 
-//go:embed icon_active.png
+//go:embed active.png
 var activePNG []byte
 
 func iconBytes() []byte       { return idlePNG }

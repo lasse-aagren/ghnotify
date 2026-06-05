@@ -93,6 +93,12 @@ func (c *Client) searchPRs(ctx context.Context, query string, since time.Time) (
 	return prs, nil
 }
 
+// FetchPRDetail fetches full detail for a single PR by number.
+func (c *Client) FetchPRDetail(ctx context.Context, owner, repo string, number int) (*PR, error) {
+	issue := &ghapi.Issue{Number: &number}
+	return c.fetchPRDetail(ctx, owner, repo, issue)
+}
+
 func (c *Client) fetchPRDetail(ctx context.Context, owner, repo string, issue *ghapi.Issue) (*PR, error) {
 	number := issue.GetNumber()
 
@@ -141,37 +147,19 @@ func (c *Client) fetchPRDetail(ctx context.Context, owner, repo string, issue *g
 	}, nil
 }
 
-// fetchCIStatus aggregates both legacy commit statuses and modern check runs.
+// fetchCIStatus aggregates modern check runs for the given SHA.
 func (c *Client) fetchCIStatus(ctx context.Context, owner, repo, sha string) CIStatus {
 	if sha == "" {
 		return CIUnknown
 	}
 
-	// Fetch legacy statuses and check runs concurrently.
-	var legacyState string
-	var runs *ghapi.ListCheckRunsResults
+	runs, _, err := c.inner.Checks.ListCheckRunsForRef(ctx, owner, repo, sha,
+		&ghapi.ListCheckRunsOptions{ListOptions: ghapi.ListOptions{PerPage: 100}})
+	if err != nil {
+		runs = nil
+	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
-	go func() {
-		defer wg.Done()
-		combined, _, err := c.inner.Repositories.GetCombinedStatus(ctx, owner, repo, sha, nil)
-		if err == nil {
-			legacyState = combined.GetState()
-		}
-	}()
-	go func() {
-		defer wg.Done()
-		var err error
-		runs, _, err = c.inner.Checks.ListCheckRunsForRef(ctx, owner, repo, sha,
-			&ghapi.ListCheckRunsOptions{ListOptions: ghapi.ListOptions{PerPage: 100}})
-		if err != nil {
-			runs = nil
-		}
-	}()
-	wg.Wait()
-
-	return aggregateCIStatus(repo, legacyState, runs)
+	return aggregateCIStatus(repo, runs)
 }
 
 // --- aggregation helpers -----------------------------------------------------
@@ -207,17 +195,10 @@ func aggregateReviewState(reviews []*ghapi.PullRequestReview) ReviewState {
 	return ReviewPending
 }
 
-func aggregateCIStatus(repo, legacyState string, runs *ghapi.ListCheckRunsResults) CIStatus {
+func aggregateCIStatus(repo string, runs *ghapi.ListCheckRunsResults) CIStatus {
 	failing, pending, passing := false, false, false
 
-	switch legacyState {
-	case "success":
-		passing = true
-	case "failure", "error":
-		failing = true
-	case "pending":
-		pending = true
-	}
+	slog.Debug("aggregating CI status", "repo", repo)
 
 	if runs != nil {
 		for _, run := range runs.CheckRuns {
