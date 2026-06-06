@@ -9,9 +9,10 @@ requests from others — across github.com and GitHub Enterprise Server instance
 
 - **My Pull Requests** — draft, approved, changes-requested, CI status, merge readiness
 - **Review Requests** — all open PRs where you're a requested reviewer
-- **Activity Indicator** – red dot in the tray icon when there's new/unacknowledged activity
+- **Activity Indicator** – red dot in the tray icon when there's new/unacknowledged activity.
+  Use `Acknowledge All` to clear this whilst leaving the PRs in the list.
 - **OS notifications** for review requests, approvals, CI changes (individually configurable)
-- **Snooze** a PR until next change or for a fixed duration (1 h / 8 h / 24 h)
+- **Snooze** a PR until next change or for a fixed duration. Snoozed items will disappear from the list.
 - **Multiple servers** — github.com + any number of GitHub Enterprise instances
 - **gh CLI integration** — servers and auth tokens discovered automatically from the [gh](https://cli.github.com/) CLI
 
