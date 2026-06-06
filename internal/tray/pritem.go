@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/url"
 	"os/exec"
 	"strings"
 	"sync"
@@ -28,6 +29,7 @@ type prItem struct {
 	// menu items (created once, never destroyed)
 	mItem *systray.MenuItem
 
+	mTitle   *systray.MenuItem
 	mOpen    *systray.MenuItem
 	mCopy    *systray.MenuItem
 	mApprove *systray.MenuItem
@@ -49,6 +51,9 @@ type prItem struct {
 func newPRItem(mgr *auth.Manager, snooze *poller.SnoozeStore, showApprove bool, onSnooze func()) *prItem {
 	it := &prItem{mgr: mgr, snooze: snooze, onSnooze: onSnooze}
 	it.mItem = systray.AddMenuItem("", "")
+	it.mTitle = it.mItem.AddSubMenuItem("", "")
+	it.mTitle.Disable()
+
 	it.mOpen = it.mItem.AddSubMenuItem("Open in Browser", "")
 	it.mCopy = it.mItem.AddSubMenuItem("Copy URL", "")
 	it.mApprove = it.mItem.AddSubMenuItem("Approve", "")
@@ -86,6 +91,7 @@ func (it *prItem) assign(pr github.PR) {
 	it.pr = &pr
 	it.mu.Unlock()
 
+	it.mTitle.SetTitle(it.formatTitle())
 	it.mItem.SetTitle(formatPRTitle(pr))
 	it.mItem.SetTooltip("")
 	it.mStatusCI.SetTitle(formatCIStatus(pr.CIStatus))
@@ -96,6 +102,18 @@ func (it *prItem) assign(pr github.PR) {
 	it.mApprove.SetTitle("Approve")
 	it.mApprove.Enable()
 	it.mItem.Show()
+}
+
+func (it *prItem) formatTitle() string {
+	pr := it.currentPR()
+	if pr == nil {
+		return ""
+	}
+	u, err := url.Parse(pr.URL)
+	if err != nil {
+		return ""
+	}
+	return strings.Join([]string{u.Host, u.Path}, "/")
 }
 
 // clear hides this slot and detaches the PR.
