@@ -12,6 +12,7 @@ requests from others — across github.com and GitHub Enterprise Server instance
 - **Multiple servers** — github.com + any number of GitHub Enterprise instances
 - **gh CLI integration** — servers and auth tokens discovered automatically from the [gh](https://cli.github.com/) CLI
 
+<!-- 
 ## Installation
 
 ### Download binary (recommended)
@@ -30,15 +31,22 @@ On first launch macOS may quarantine the binary. Run once to clear it:
 ```sh
 xattr -d com.apple.quarantine /usr/local/bin/ghnotify
 ```
+-->
 
-### Build from source
+## Build/install from source
 
 Requires Go 1.25+ and Xcode Command Line Tools (`xcode-select --install`).
 
 ```sh
 git clone https://github.com/boyvinall/ghnotify
 cd ghnotify
-make build
+make install # builds and copies the app to /Applications/ghnotify.app
+```
+
+For other available `make` targets, you can run:
+
+```sh
+make help
 ```
 
 ## First-time setup
@@ -58,7 +66,7 @@ Config file: `~/Library/Application Support/ghnotify/config.toml`
 
 ```toml
 # How often to poll each server for changes. Go duration string (e.g. "30s", "5m").
-poll_interval = "60s"
+poll_interval = "120s"
 
 # Filter out PRs older than this duration. Empty string disables the filter.
 max_pr_age = "168h"

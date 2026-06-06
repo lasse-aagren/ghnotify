@@ -43,7 +43,7 @@ func (c *AppConfig) ParseMaxPRAge() time.Duration {
 // Default returns an AppConfig with default values for all fields.
 func Default() *AppConfig {
 	return &AppConfig{
-		PollInterval:     "60s",
+		PollInterval:     "120s",
 		MaxPRAge:         "168h", // 1 week
 		MaxPRsPerSection: 20,
 		ExcludeAuthors:   []string{"app/renovate", "app/dependabot"},
