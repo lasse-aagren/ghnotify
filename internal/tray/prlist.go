@@ -2,6 +2,7 @@ package tray
 
 import (
 	"fmt"
+	"log/slog"
 	"sort"
 	"sync"
 
@@ -24,10 +25,20 @@ type prList struct {
 	showApprove bool
 	mgr         *auth.Manager
 	snooze      *poller.SnoozeStore
+	getPRs      getPRsFunc
 }
 
-func newPRList(maxItems int, mgr *auth.Manager, snooze *poller.SnoozeStore, label string, showApprove bool) *prList {
-	return &prList{maxItems: maxItems, label: label, showApprove: showApprove, mgr: mgr, snooze: snooze}
+type getPRsFunc func() []github.PR
+
+func newPRList(maxItems int, mgr *auth.Manager, snooze *poller.SnoozeStore, label string, showApprove bool, getPRs getPRsFunc) *prList {
+	return &prList{
+		maxItems:    maxItems,
+		label:       label,
+		showApprove: showApprove,
+		mgr:         mgr,
+		snooze:      snooze,
+		getPRs:      getPRs,
+	}
 }
 
 // build creates the header and all pre-allocated slot items in the menu.
@@ -38,7 +49,9 @@ func (l *prList) build() {
 
 	l.slots = make([]*prItem, l.maxItems)
 	for i := range l.slots {
-		l.slots[i] = newPRItem(l.mgr, l.snooze, l.showApprove)
+		l.slots[i] = newPRItem(l.mgr, l.snooze, l.showApprove, func() {
+			l.update() // re-render to reflect new snooze state immediately after snoozing a PR
+		})
 	}
 
 	l.mMore = systray.AddMenuItem("", "")
@@ -48,11 +61,18 @@ func (l *prList) build() {
 
 // update re-renders the section with the provided PR list (full server snapshot).
 // It filters snoozed PRs, sorts, caps at maxItems, and returns the visible count.
-func (l *prList) update(prs []github.PR) int {
+func (l *prList) update() int {
+	prs := l.getPRs()
+
 	// Filter snoozed.
 	visible := make([]github.PR, 0, len(prs))
 	for _, pr := range prs {
-		if !l.snooze.IsSnoozed(pr.Key(), pr.UpdatedAt) {
+		key := pr.Key()
+		snoozed := l.snooze.IsSnoozed(key, pr.UpdatedAt)
+		if snoozed {
+			slog.Debug("PR is snoozed, skipping", "key", key)
+		} else {
+			slog.Debug("PR is visible", "key", key)
 			visible = append(visible, pr)
 		}
 	}

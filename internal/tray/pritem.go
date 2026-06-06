@@ -37,13 +37,16 @@ type prItem struct {
 	mSnooze1h     *systray.MenuItem //   └── 1 hour
 	mSnooze8h     *systray.MenuItem //   └── 8 hours
 	mSnooze24h    *systray.MenuItem //   └── 24 hours
+	mSnooze48h    *systray.MenuItem //   └── 48 hours
+	mSnooze1w     *systray.MenuItem //   └── 1 week
 
-	mgr    *auth.Manager
-	snooze *poller.SnoozeStore
+	mgr      *auth.Manager
+	snooze   *poller.SnoozeStore
+	onSnooze func()
 }
 
-func newPRItem(mgr *auth.Manager, snooze *poller.SnoozeStore, showApprove bool) *prItem {
-	it := &prItem{mgr: mgr, snooze: snooze}
+func newPRItem(mgr *auth.Manager, snooze *poller.SnoozeStore, showApprove bool, onSnooze func()) *prItem {
+	it := &prItem{mgr: mgr, snooze: snooze, onSnooze: onSnooze}
 	it.mItem = systray.AddMenuItem("", "")
 	it.mStatusCI = it.mItem.AddSubMenuItem("", "")
 	it.mStatusCI.Disable()
@@ -66,6 +69,8 @@ func newPRItem(mgr *auth.Manager, snooze *poller.SnoozeStore, showApprove bool) 
 	it.mSnooze1h = it.mSnooze.AddSubMenuItem("1 hour", "")
 	it.mSnooze8h = it.mSnooze.AddSubMenuItem("8 hours", "")
 	it.mSnooze24h = it.mSnooze.AddSubMenuItem("24 hours", "")
+	it.mSnooze48h = it.mSnooze.AddSubMenuItem("48 hours", "")
+	it.mSnooze1w = it.mSnooze.AddSubMenuItem("1 week", "")
 	it.mItem.Hide()
 	go it.listen()
 	return it
@@ -119,33 +124,41 @@ func (it *prItem) listen() {
 				go it.doApprove(pr)
 			}
 		case <-it.mSnoozeChange.ClickedCh:
-			if pr := it.currentPR(); pr != nil {
-				it.snooze.Snooze(pr.Key(), poller.SnoozeEntry{
-					Mode:            poller.SnoozeModeUntilChange,
-					SnapshotUpdated: pr.UpdatedAt,
-				})
-			}
+			it.snoozeUntilChange()
 		case <-it.mSnooze1h.ClickedCh:
-			if pr := it.currentPR(); pr != nil {
-				it.snooze.Snooze(pr.Key(), poller.SnoozeEntry{
-					Mode:      poller.SnoozeModeUntilTime,
-					ExpiresAt: time.Now().Add(time.Hour),
-				})
-			}
+			it.snoozeFor(time.Hour)
 		case <-it.mSnooze8h.ClickedCh:
-			if pr := it.currentPR(); pr != nil {
-				it.snooze.Snooze(pr.Key(), poller.SnoozeEntry{
-					Mode:      poller.SnoozeModeUntilTime,
-					ExpiresAt: time.Now().Add(8 * time.Hour),
-				})
-			}
+			it.snoozeFor(8 * time.Hour)
 		case <-it.mSnooze24h.ClickedCh:
-			if pr := it.currentPR(); pr != nil {
-				it.snooze.Snooze(pr.Key(), poller.SnoozeEntry{
-					Mode:      poller.SnoozeModeUntilTime,
-					ExpiresAt: time.Now().Add(24 * time.Hour),
-				})
-			}
+			it.snoozeFor(24 * time.Hour)
+		case <-it.mSnooze48h.ClickedCh:
+			it.snoozeFor(48 * time.Hour)
+		case <-it.mSnooze1w.ClickedCh:
+			it.snoozeFor(7 * 24 * time.Hour)
+		}
+	}
+}
+
+func (it *prItem) snoozeFor(d time.Duration) {
+	if pr := it.currentPR(); pr != nil {
+		it.snooze.Snooze(pr.Key(), poller.SnoozeEntry{
+			Mode:      poller.SnoozeModeUntilTime,
+			ExpiresAt: time.Now().Add(d),
+		})
+		if it.onSnooze != nil {
+			it.onSnooze()
+		}
+	}
+}
+
+func (it *prItem) snoozeUntilChange() {
+	if pr := it.currentPR(); pr != nil {
+		it.snooze.Snooze(pr.Key(), poller.SnoozeEntry{
+			Mode:            poller.SnoozeModeUntilChange,
+			SnapshotUpdated: pr.UpdatedAt,
+		})
+		if it.onSnooze != nil {
+			it.onSnooze()
 		}
 	}
 }
@@ -177,7 +190,7 @@ func formatPRTitle(pr github.PR) string {
 	if len(title) > 50 {
 		title = title[:47] + "…"
 	}
-	return fmt.Sprintf("[%s][%s] %s #%d %s", ci, rev, pr.Repo, pr.Number, title)
+	return fmt.Sprintf("%s%s %s #%d %s", ci, rev, pr.Repo, pr.Number, title)
 }
 
 func formatCIStatus(s github.CIStatus) string {

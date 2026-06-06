@@ -39,8 +39,8 @@ func dataDir() (string, error) {
 	}
 }
 
-// ConfigFilePath returns the platform-appropriate path for config.toml.
-func ConfigFilePath() (string, error) {
+// GetFilePath returns the platform-appropriate path for config.toml.
+func GetFilePath() (string, error) {
 	dir, err := appDir()
 	if err != nil {
 		return "", err

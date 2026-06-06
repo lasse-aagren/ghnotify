@@ -69,7 +69,17 @@ func (c *Client) searchPRs(ctx context.Context, query string, since time.Time) (
 				slog.Warn("fetch PR detail failed", "owner", owner, "repo", repo, "number", issue.GetNumber(), "err", err)
 				return
 			}
-			slog.Debug("fetched PR detail", "host", c.host, "owner", owner, "repo", repo, "number", pr.Number, "title", pr.Title, "draft", pr.IsDraft, "ci", pr.CIStatus, "review", pr.ReviewState)
+
+			slog.Debug("fetched PR detail",
+				"host", c.host,
+				"owner", owner,
+				"repo", repo,
+				"number", pr.Number,
+				"title", pr.Title,
+				"draft", pr.IsDraft,
+				"ci", pr.CIStatus,
+				"review", pr.ReviewState)
+
 			ch <- entry{pr, idx}
 		}(i, issue, owner, repo)
 	}

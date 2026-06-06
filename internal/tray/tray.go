@@ -3,6 +3,7 @@ package tray
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os/exec"
 
 	"github.com/getlantern/systray"
@@ -31,22 +32,25 @@ func Run(opts Options) {
 
 func onReady(opts Options) func() {
 	return func() {
+		slog.Debug("setting up tray menu")
+
 		systray.SetTemplateIcon(iconBytes(), iconBytes())
 		systray.SetTooltip("ghnotify — GitHub PR monitor")
 
 		// My PRs section — all slots created BEFORE the separator.
-		myList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "My Pull Requests", false)
+		myList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "My Pull Requests", false, opts.Poll.MyPRs)
 		myList.build()
 
 		systray.AddSeparator()
 
 		// Review Requests section — all slots created BEFORE the separator.
-		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "Review Requests", true)
+		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "Review Requests", true, opts.Poll.ReviewRequests)
 		reviewList.build()
 
 		systray.AddSeparator()
 
 		mPrefs := systray.AddMenuItem("Preferences…", "Open config file")
+		mClearSnooze := systray.AddMenuItem("Clear Snoozed Items", "Unsnooze all snoozed PRs")
 		mUpdate := systray.AddMenuItem("Check for updates", "")
 		mQuit := systray.AddMenuItem("Quit", "Quit ghnotify")
 
@@ -62,8 +66,10 @@ func onReady(opts Options) func() {
 
 		// Subscribe to poll changes.
 		opts.Poll.OnChange(func(changes []poller.Change) {
-			myCount := myList.update(opts.Poll.MyPRs())
-			revCount := reviewList.update(opts.Poll.ReviewRequests())
+			slog.Debug("poll changes", "count", len(changes))
+
+			myCount := myList.update()
+			revCount := reviewList.update()
 			if myCount+revCount > 0 {
 				systray.SetIcon(iconActiveBytes())
 			} else {
@@ -78,6 +84,8 @@ func onReady(opts Options) func() {
 				select {
 				case <-mPrefs.ClickedCh:
 					openConfig()
+				case <-mClearSnooze.ClickedCh:
+					opts.Snooze.ClearAll()
 				case <-mUpdate.ClickedCh:
 					if latestURL != "" {
 						_ = exec.Command("open", latestURL).Start()
@@ -97,7 +105,7 @@ func onReady(opts Options) func() {
 func onExit() {}
 
 func openConfig() {
-	path, err := config.ConfigFilePath()
+	path, err := config.GetFilePath()
 	if err != nil {
 		return
 	}

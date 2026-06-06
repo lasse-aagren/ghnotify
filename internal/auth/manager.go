@@ -17,7 +17,9 @@ type Server struct {
 // Manager discovers hosts and tokens from the gh CLI.
 type Manager struct{}
 
+// NewManager initializes a Manager. It does not read any data until methods are called.
 func NewManager() *Manager {
+	slog.Debug("initializing auth manager")
 	return &Manager{}
 }
 

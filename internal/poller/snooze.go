@@ -52,6 +52,14 @@ func (s *SnoozeStore) Unsnooze(key string) {
 	s.save()
 }
 
+// ClearAll removes all snooze entries.
+func (s *SnoozeStore) ClearAll() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entries = make(map[string]SnoozeEntry)
+	s.save()
+}
+
 // IsSnoozed reports whether the PR with key is currently snoozed.
 // updatedAt should be PR.UpdatedAt; it is used to lift "until_change" snoozes.
 func (s *SnoozeStore) IsSnoozed(key string, updatedAt time.Time) bool {

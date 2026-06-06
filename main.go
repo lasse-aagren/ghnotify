@@ -118,6 +118,8 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	poll.Start()
 	defer poll.Stop()
 
+	// Run the tray. This will block until the user quits.
+	slog.Debug("starting tray")
 	tray.Run(tray.Options{
 		Config:  cfg,
 		Auth:    mgr,

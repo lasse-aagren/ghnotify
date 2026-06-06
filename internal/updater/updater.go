@@ -5,7 +5,7 @@ package updater
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -87,6 +87,7 @@ type releaseResponse struct {
 
 func (u *Updater) check(onFound func(string, string)) {
 	if u.currentVersion == "dev" || u.currentVersion == "" || onFound == nil {
+		slog.Debug("skipping update check in dev mode")
 		return
 	}
 
@@ -100,19 +101,22 @@ func (u *Updater) check(onFound func(string, string)) {
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("X-GitHub-Api-Version", "2022-11-28")
 
+	slog.Debug("ghnotify: update check")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		log.Printf("ghnotify: update check: %v", err)
+		slog.Debug("ghnotify: update check:", "error", err)
 		return
 	}
 	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
+		slog.Debug("ghnotify: update check: unexpected status code", "status", resp.StatusCode)
 		return
 	}
 
 	var rel releaseResponse
 	if err := json.NewDecoder(resp.Body).Decode(&rel); err != nil {
+		slog.Debug("ghnotify: update check: failed to decode response", "error", err)
 		return
 	}
 	if rel.Draft || rel.Prerelease || rel.TagName == "" {
@@ -120,6 +124,7 @@ func (u *Updater) check(onFound func(string, string)) {
 	}
 
 	if isNewer(u.currentVersion, rel.TagName) {
+		slog.Info("ghnotify: new release found", "version", rel.TagName, "url", rel.HTMLURL)
 		onFound(rel.TagName, rel.HTMLURL)
 	}
 }
