@@ -3,12 +3,15 @@
 A macOS menubar app that monitors GitHub pull requests — yours and review
 requests from others — across github.com and GitHub Enterprise Server instances.
 
+![image](./image.png)
+
 ## Features
 
 - **My Pull Requests** — draft, approved, changes-requested, CI status, merge readiness
 - **Review Requests** — all open PRs where you're a requested reviewer
-- **Snooze** a PR until next change or for a fixed duration (1 h / 8 h / 24 h)
+- **Activity Indicator** – red dot in the tray icon when there's new/unacknowledged activity
 - **OS notifications** for review requests, approvals, CI changes (individually configurable)
+- **Snooze** a PR until next change or for a fixed duration (1 h / 8 h / 24 h)
 - **Multiple servers** — github.com + any number of GitHub Enterprise instances
 - **gh CLI integration** — servers and auth tokens discovered automatically from the [gh](https://cli.github.com/) CLI
 
