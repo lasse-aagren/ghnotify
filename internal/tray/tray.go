@@ -30,11 +30,19 @@ func Run(opts Options) {
 	systray.Run(onReady(opts), onExit)
 }
 
+func setIcon(active bool) {
+	if active {
+		systray.SetIcon(iconActiveBytes())
+	} else {
+		systray.SetIcon(iconBytes())
+	}
+}
+
 func onReady(opts Options) func() {
 	return func() {
 		slog.Debug("setting up tray menu")
 
-		systray.SetTemplateIcon(iconBytes(), iconBytes())
+		setIcon(false)
 		systray.SetTooltip("ghnotify — GitHub PR monitor")
 
 		// My PRs section — all slots created BEFORE the separator.
@@ -51,6 +59,7 @@ func onReady(opts Options) func() {
 		systray.AddSeparator()
 
 		mPrefs := systray.AddMenuItem("Preferences…", "Open config file")
+		mAckAll := systray.AddMenuItem("Acknowledge All", "Dismiss active icon until next change")
 		mClearSnooze := systray.AddMenuItem("Clear Snoozed Items", "Unsnooze all snoozed PRs")
 		mUpdate := systray.AddMenuItem("Check for updates", "")
 		mQuit := systray.AddMenuItem("Quit", "Quit ghnotify")
@@ -71,18 +80,16 @@ func onReady(opts Options) func() {
 
 			myCount := myList.update()
 			revCount := reviewList.update()
-			if myCount+revCount > 0 {
-				systray.SetIcon(iconActiveBytes())
-			} else {
-				// systray.SetTemplateIcon(iconBytes(), iconBytes())
-				systray.SetIcon(iconBytes())
-			}
+			active := myCount+revCount > 0
+			setIcon(active)
 			opts.Notif.HandleChanges(changes)
 		})
 
 		go func() {
 			for {
 				select {
+				case <-mAckAll.ClickedCh:
+					setIcon(false)
 				case <-mPrefs.ClickedCh:
 					openConfig()
 				case <-mClearSnooze.ClickedCh:
