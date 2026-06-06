@@ -19,58 +19,62 @@ import (
 // prItem is one slot in a prList. Slots are pre-created and shown/hidden as the
 // PR list changes. Each slot owns its full sub-menu (Open, Copy, Approve, Snooze…).
 type prItem struct {
-	mu sync.RWMutex
-	pr *github.PR // nil = slot is unused
-
-	// menu items (created once, never destroyed)
-	mItem         *systray.MenuItem
-	mStatusCI     *systray.MenuItem // greyed-out status: CI
-	mStatusReview *systray.MenuItem // greyed-out status: review / draft
-	mStatusMerge  *systray.MenuItem // greyed-out status: mergeability
-	mStatusMeta   *systray.MenuItem // greyed-out status: author + comments
-	mStatusRef    *systray.MenuItem // greyed-out status: branch ref
-	mOpen         *systray.MenuItem
-	mCopy         *systray.MenuItem
-	mApprove      *systray.MenuItem
-	mSnooze       *systray.MenuItem // "Snooze…" parent
-	mSnoozeChange *systray.MenuItem //   └── Until next change
-	mSnooze1h     *systray.MenuItem //   └── 1 hour
-	mSnooze8h     *systray.MenuItem //   └── 8 hours
-	mSnooze24h    *systray.MenuItem //   └── 24 hours
-	mSnooze48h    *systray.MenuItem //   └── 48 hours
-	mSnooze1w     *systray.MenuItem //   └── 1 week
-
+	mu       sync.RWMutex
+	pr       *github.PR // nil = slot is unused
 	mgr      *auth.Manager
 	snooze   *poller.SnoozeStore
 	onSnooze func()
+
+	// menu items (created once, never destroyed)
+	mItem *systray.MenuItem
+
+	mOpen    *systray.MenuItem
+	mCopy    *systray.MenuItem
+	mApprove *systray.MenuItem
+
+	mStatusCI     *systray.MenuItem
+	mStatusReview *systray.MenuItem
+	mStatusMerge  *systray.MenuItem
+	mStatusMeta   *systray.MenuItem
+	mStatusRef    *systray.MenuItem
+
+	mSnoozeChange *systray.MenuItem
+	mSnooze1h     *systray.MenuItem
+	mSnooze8h     *systray.MenuItem
+	mSnooze24h    *systray.MenuItem
+	mSnooze48h    *systray.MenuItem
+	mSnooze1w     *systray.MenuItem
 }
 
 func newPRItem(mgr *auth.Manager, snooze *poller.SnoozeStore, showApprove bool, onSnooze func()) *prItem {
 	it := &prItem{mgr: mgr, snooze: snooze, onSnooze: onSnooze}
 	it.mItem = systray.AddMenuItem("", "")
-	it.mStatusCI = it.mItem.AddSubMenuItem("", "")
-	it.mStatusCI.Disable()
-	it.mStatusReview = it.mItem.AddSubMenuItem("", "")
-	it.mStatusReview.Disable()
-	it.mStatusMerge = it.mItem.AddSubMenuItem("", "")
-	it.mStatusMerge.Disable()
-	it.mStatusMeta = it.mItem.AddSubMenuItem("", "")
-	it.mStatusMeta.Disable()
-	it.mStatusRef = it.mItem.AddSubMenuItem("", "")
-	it.mStatusRef.Disable()
 	it.mOpen = it.mItem.AddSubMenuItem("Open in Browser", "")
 	it.mCopy = it.mItem.AddSubMenuItem("Copy URL", "")
 	it.mApprove = it.mItem.AddSubMenuItem("Approve", "")
 	if !showApprove {
 		it.mApprove.Hide()
 	}
-	it.mSnooze = it.mItem.AddSubMenuItem("Snooze…", "")
-	it.mSnoozeChange = it.mSnooze.AddSubMenuItem("Until next change", "")
-	it.mSnooze1h = it.mSnooze.AddSubMenuItem("1 hour", "")
-	it.mSnooze8h = it.mSnooze.AddSubMenuItem("8 hours", "")
-	it.mSnooze24h = it.mSnooze.AddSubMenuItem("24 hours", "")
-	it.mSnooze48h = it.mSnooze.AddSubMenuItem("48 hours", "")
-	it.mSnooze1w = it.mSnooze.AddSubMenuItem("1 week", "")
+
+	it.mItem.AddSeparator()
+	status := it.mItem.AddSubMenuItem("Status…", "")
+	status.Disable()
+	it.mStatusCI = it.mItem.AddSubMenuItem("", "")
+	// it.mStatusCI.SetIcon() for copy/paste CI icons in front of the text
+	it.mStatusReview = it.mItem.AddSubMenuItem("", "")
+	it.mStatusMerge = it.mItem.AddSubMenuItem("", "")
+	it.mStatusMeta = it.mItem.AddSubMenuItem("", "")
+	it.mStatusRef = it.mItem.AddSubMenuItem("", "")
+
+	it.mItem.AddSeparator()
+	sep := it.mItem.AddSubMenuItem("Snooze…", "")
+	sep.Disable()
+	it.mSnoozeChange = it.mItem.AddSubMenuItem("Until next change", "")
+	it.mSnooze1h = it.mItem.AddSubMenuItem("1 hour", "")
+	it.mSnooze8h = it.mItem.AddSubMenuItem("8 hours", "")
+	it.mSnooze24h = it.mItem.AddSubMenuItem("24 hours", "")
+	it.mSnooze48h = it.mItem.AddSubMenuItem("48 hours", "")
+	it.mSnooze1w = it.mItem.AddSubMenuItem("1 week", "")
 	it.mItem.Hide()
 	go it.listen()
 	return it

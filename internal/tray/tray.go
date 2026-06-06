@@ -44,7 +44,8 @@ func onReady(opts Options) func() {
 		systray.AddSeparator()
 
 		// Review Requests section — all slots created BEFORE the separator.
-		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "Review Requests", true, opts.Poll.ReviewRequests)
+		enableApprovePR := false
+		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "Review Requests", enableApprovePR, opts.Poll.ReviewRequests)
 		reviewList.build()
 
 		systray.AddSeparator()
@@ -86,6 +87,8 @@ func onReady(opts Options) func() {
 					openConfig()
 				case <-mClearSnooze.ClickedCh:
 					opts.Snooze.ClearAll()
+					myList.update()
+					reviewList.update()
 				case <-mUpdate.ClickedCh:
 					if latestURL != "" {
 						_ = exec.Command("open", latestURL).Start()

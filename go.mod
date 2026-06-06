@@ -32,3 +32,5 @@ require (
 	github.com/tadvi/systray v0.0.0-20190226123456-11a2b8fa57af // indirect
 	golang.org/x/sys v0.30.0 // indirect
 )
+
+replace github.com/getlantern/systray => github.com/boyvinall/systray v0.0.0-20241014093101-c0e8f09a55c0
