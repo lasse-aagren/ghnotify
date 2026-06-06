@@ -19,14 +19,14 @@ const (
 // SnoozeEntry records the snooze state for one PR.
 type SnoozeEntry struct {
 	Mode      string    `json:"mode"`
-	ExpiresAt time.Time `json:"expires_at,omitempty"` // for until_time
+	ExpiresAt time.Time `json:"expires_at"` // for until_time
 
 	// for until_change: snapshot of PR state at snooze time
-	SnapshotRef          string             `json:"snapshot_ref,omitempty"`
-	SnapshotCIStatus     github.CIStatus    `json:"snapshot_ci_status,omitempty"`
-	SnapshotReviewState  github.ReviewState `json:"snapshot_review_state,omitempty"`
-	SnapshotIsDraft      bool               `json:"snapshot_is_draft,omitempty"`
-	SnapshotUpdated      time.Time          `json:"snapshot_updated_at,omitempty"` // fallback for old entries without SnapshotRef
+	SnapshotRef         string             `json:"snapshot_ref,omitempty"`
+	SnapshotCIStatus    github.CIStatus    `json:"snapshot_ci_status,omitempty"`
+	SnapshotReviewState github.ReviewState `json:"snapshot_review_state,omitempty"`
+	SnapshotIsDraft     bool               `json:"snapshot_is_draft,omitempty"`
+	SnapshotUpdated     time.Time          `json:"snapshot_updated_at"` // fallback for old entries without SnapshotRef
 }
 
 // SnoozeStore persists per-PR snooze decisions to a JSON file.

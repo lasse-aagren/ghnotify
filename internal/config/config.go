@@ -46,7 +46,7 @@ func Default() *AppConfig {
 		PollInterval:     "60s",
 		MaxPRAge:         "168h", // 1 week
 		MaxPRsPerSection: 20,
-		ExcludeAuthors:   []string{"app/renovate", "app/unity-renovate", "app/dependabot"},
+		ExcludeAuthors:   []string{"app/renovate", "app/dependabot"},
 		Notifications: NotificationConfig{
 			NewReviewRequests: true,
 			PRApproved:        true,
