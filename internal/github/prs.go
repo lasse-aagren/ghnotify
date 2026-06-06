@@ -148,6 +148,7 @@ func (c *Client) fetchPRDetail(ctx context.Context, owner, repo string, issue *g
 		URL:          ghPR.GetHTMLURL(),
 		Author:       ghPR.GetUser().GetLogin(),
 		HeadRef:      ghPR.GetHead().GetRef(),
+		HeadSHA:      sha,
 		IsDraft:      ghPR.GetDraft(),
 		ReviewState:  aggregateReviewState(reviews),
 		CIStatus:     ciStatus,

@@ -158,8 +158,12 @@ func (it *prItem) snoozeFor(d time.Duration) {
 func (it *prItem) snoozeUntilChange() {
 	if pr := it.currentPR(); pr != nil {
 		it.snooze.Snooze(pr.Key(), poller.SnoozeEntry{
-			Mode:            poller.SnoozeModeUntilChange,
-			SnapshotUpdated: pr.UpdatedAt,
+			Mode:                poller.SnoozeModeUntilChange,
+			SnapshotRef:         pr.HeadSHA,
+			SnapshotCIStatus:    pr.CIStatus,
+			SnapshotReviewState: pr.ReviewState,
+			SnapshotIsDraft:     pr.IsDraft,
+			SnapshotUpdated:     pr.UpdatedAt,
 		})
 		if it.onSnooze != nil {
 			it.onSnooze()

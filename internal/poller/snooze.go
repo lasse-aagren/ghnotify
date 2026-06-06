@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/boyvinall/ghnotify/internal/github"
 )
 
 const (
@@ -16,9 +18,15 @@ const (
 
 // SnoozeEntry records the snooze state for one PR.
 type SnoozeEntry struct {
-	Mode            string    `json:"mode"`
-	ExpiresAt       time.Time `json:"expires_at,omitempty"`          // for until_time
-	SnapshotUpdated time.Time `json:"snapshot_updated_at,omitempty"` // for until_change
+	Mode      string    `json:"mode"`
+	ExpiresAt time.Time `json:"expires_at,omitempty"` // for until_time
+
+	// for until_change: snapshot of PR state at snooze time
+	SnapshotRef          string             `json:"snapshot_ref,omitempty"`
+	SnapshotCIStatus     github.CIStatus    `json:"snapshot_ci_status,omitempty"`
+	SnapshotReviewState  github.ReviewState `json:"snapshot_review_state,omitempty"`
+	SnapshotIsDraft      bool               `json:"snapshot_is_draft,omitempty"`
+	SnapshotUpdated      time.Time          `json:"snapshot_updated_at,omitempty"` // fallback for old entries without SnapshotRef
 }
 
 // SnoozeStore persists per-PR snooze decisions to a JSON file.
@@ -60,32 +68,46 @@ func (s *SnoozeStore) ClearAll() {
 	s.save()
 }
 
-// IsSnoozed reports whether the PR with key is currently snoozed.
-// updatedAt should be PR.UpdatedAt; it is used to lift "until_change" snoozes.
-func (s *SnoozeStore) IsSnoozed(key string, updatedAt time.Time) bool {
+// IsSnoozed reports whether pr is currently snoozed.
+// For until_change snoozes, it lifts the snooze if the head SHA, CI status,
+// review state, or draft status has changed since the snooze was set.
+func (s *SnoozeStore) IsSnoozed(pr github.PR) bool {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	e, ok := s.entries[key]
+	e, ok := s.entries[pr.Key()]
 	if !ok {
 		return false
 	}
 	switch e.Mode {
 	case SnoozeModeUntilTime:
 		if time.Now().After(e.ExpiresAt) {
-			delete(s.entries, key)
+			delete(s.entries, pr.Key())
 			s.save()
 			return false
 		}
 		return true
 	case SnoozeModeUntilChange:
-		if updatedAt.After(e.SnapshotUpdated) {
-			delete(s.entries, key)
+		changed := s.hasChanged(e, pr)
+		if changed {
+			delete(s.entries, pr.Key())
 			s.save()
 			return false
 		}
 		return true
 	}
 	return false
+}
+
+func (s *SnoozeStore) hasChanged(e SnoozeEntry, pr github.PR) bool {
+	if e.SnapshotRef != "" {
+		// New-style entry: compare all tracked fields.
+		return pr.HeadSHA != e.SnapshotRef ||
+			pr.CIStatus != e.SnapshotCIStatus ||
+			pr.ReviewState != e.SnapshotReviewState ||
+			pr.IsDraft != e.SnapshotIsDraft
+	}
+	// Old-style entry: fall back to UpdatedAt comparison.
+	return pr.UpdatedAt.After(e.SnapshotUpdated)
 }
 
 // --- persistence -------------------------------------------------------------

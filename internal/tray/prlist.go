@@ -68,7 +68,7 @@ func (l *prList) update() int {
 	visible := make([]github.PR, 0, len(prs))
 	for _, pr := range prs {
 		key := pr.Key()
-		snoozed := l.snooze.IsSnoozed(key, pr.UpdatedAt)
+		snoozed := l.snooze.IsSnoozed(pr)
 		if snoozed {
 			slog.Debug("PR is snoozed, skipping", "key", key)
 		} else {

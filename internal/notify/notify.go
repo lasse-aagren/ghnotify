@@ -34,7 +34,7 @@ func (n *Notifier) HandleChanges(changes []poller.Change) {
 }
 
 func (n *Notifier) dispatch(c poller.Change) {
-	if n.snooze.IsSnoozed(c.PR.Key(), c.PR.UpdatedAt) {
+	if n.snooze.IsSnoozed(c.PR) {
 		return
 	}
 	title, body, ok := n.format(c)

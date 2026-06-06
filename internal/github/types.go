@@ -48,6 +48,7 @@ type PR struct {
 	CIStatus     CIStatus
 	Merge        Mergeability
 	HeadRef      string
+	HeadSHA      string
 	CommentCount int
 	UpdatedAt    time.Time
 }
