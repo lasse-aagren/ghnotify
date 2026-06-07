@@ -112,8 +112,14 @@ func run(ctx context.Context, cmd *cli.Command) error {
 		return fmt.Errorf("snooze path: %w", err)
 	}
 
+	ackPath, err := config.AcknowledgeFilePath()
+	if err != nil {
+		return fmt.Errorf("acknowledge path: %w", err)
+	}
+
 	mgr := auth.NewManager()
 	snooze := poller.NewSnoozeStore(snoozePath)
+	ack := poller.NewAcknowledgeStore(ackPath)
 	poll := poller.NewManager(mgr, cfg)
 	poll.Start()
 	defer poll.Stop()
@@ -121,12 +127,13 @@ func run(ctx context.Context, cmd *cli.Command) error {
 	// Run the tray. This will block until the user quits.
 	slog.Debug("starting tray")
 	tray.Run(tray.Options{
-		Config:  cfg,
-		Auth:    mgr,
-		Poll:    poll,
-		Snooze:  snooze,
-		Notif:   notify.NewNotifier(&cfg.Notifications, snooze),
-		Updater: updater.NewUpdater(version),
+		Config:      cfg,
+		Auth:        mgr,
+		Poll:        poll,
+		Snooze:      snooze,
+		Acknowledge: ack,
+		Notif:       notify.NewNotifier(&cfg.Notifications, snooze),
+		Updater:     updater.NewUpdater(version),
 	})
 	return nil
 }

@@ -65,3 +65,12 @@ func SnoozeFilePath() (string, error) {
 	}
 	return filepath.Join(dir, "snooze.json"), nil
 }
+
+// AcknowledgeFilePath returns the platform-appropriate path for acknowledge.json.
+func AcknowledgeFilePath() (string, error) {
+	dir, err := dataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "acknowledge.json"), nil
+}

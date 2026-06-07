@@ -9,6 +9,7 @@ import (
 	"github.com/getlantern/systray"
 
 	"github.com/boyvinall/ghnotify/internal/auth"
+	"github.com/boyvinall/ghnotify/internal/config"
 	"github.com/boyvinall/ghnotify/internal/github"
 	"github.com/boyvinall/ghnotify/internal/poller"
 )
@@ -25,18 +26,24 @@ type prList struct {
 	showApprove bool
 	mgr         *auth.Manager
 	snooze      *poller.SnoozeStore
+	acknowledge *poller.AcknowledgeStore
+	notifyCfg   *config.NotificationConfig
+	prevSnoozed map[string]bool
 	getPRs      getPRsFunc
 }
 
 type getPRsFunc func() []github.PR
 
-func newPRList(maxItems int, mgr *auth.Manager, snooze *poller.SnoozeStore, label string, showApprove bool, getPRs getPRsFunc) *prList {
+func newPRList(maxItems int, mgr *auth.Manager, snooze *poller.SnoozeStore, ack *poller.AcknowledgeStore, notifyCfg *config.NotificationConfig, label string, showApprove bool, getPRs getPRsFunc) *prList {
 	return &prList{
 		maxItems:    maxItems,
 		label:       label,
 		showApprove: showApprove,
 		mgr:         mgr,
 		snooze:      snooze,
+		acknowledge: ack,
+		notifyCfg:   notifyCfg,
+		prevSnoozed: make(map[string]bool),
 		getPRs:      getPRs,
 	}
 }
@@ -60,33 +67,42 @@ func (l *prList) build() {
 }
 
 // update re-renders the section with the provided PR list (full server snapshot).
-// It filters snoozed PRs, sorts, caps at maxItems, and returns the visible count.
-func (l *prList) update() int {
+// It filters snoozed PRs, sorts, caps at maxItems, and returns the visible and
+// active counts. visible drives the menu header; active drives the tray icon.
+func (l *prList) update() (visible, active int) {
 	prs := l.getPRs()
 
-	// Filter snoozed.
-	visible := make([]github.PR, 0, len(prs))
+	// Filter snoozed, detect expiry, collect visible PRs.
+	visiblePRs := make([]github.PR, 0, len(prs))
 	for _, pr := range prs {
 		key := pr.Key()
 		snoozed := l.snooze.IsSnoozed(pr)
+
+		// When a time-based snooze expires, override any acknowledgment so the
+		// snooze expiry always re-activates the icon.
+		if l.prevSnoozed[key] && !snoozed {
+			l.acknowledge.Clear(key)
+		}
+		l.prevSnoozed[key] = snoozed
+
 		if snoozed {
 			slog.Debug("PR is snoozed, skipping", "key", key)
 		} else {
 			slog.Debug("PR is visible", "key", key)
-			visible = append(visible, pr)
+			visiblePRs = append(visiblePRs, pr)
 		}
 	}
 
 	// Sort: most recently updated first.
-	sort.Slice(visible, func(i, j int) bool {
-		return visible[i].UpdatedAt.After(visible[j].UpdatedAt)
+	sort.Slice(visiblePRs, func(i, j int) bool {
+		return visiblePRs[i].UpdatedAt.After(visiblePRs[j].UpdatedAt)
 	})
 
-	total := len(visible)
-	display := visible
+	total := len(visiblePRs)
+	display := visiblePRs
 	overflow := 0
 	if total > l.maxItems {
-		display = visible[:l.maxItems]
+		display = visiblePRs[:l.maxItems]
 		overflow = total - l.maxItems
 	}
 
@@ -110,12 +126,20 @@ func (l *prList) update() int {
 		l.mMore.Hide()
 	}
 
-	// Update section header with count.
-	if total == 0 {
+	// Update section header with visible count.
+	visible = total
+	if visible == 0 {
 		l.header.SetTitle(l.label)
 	} else {
-		l.header.SetTitle(fmt.Sprintf("%s  (%d)", l.label, total))
+		l.header.SetTitle(fmt.Sprintf("%s  (%d)", l.label, visible))
 	}
 
-	return total
+	// Active count excludes acknowledged PRs.
+	for _, pr := range visiblePRs {
+		if !l.acknowledge.IsAcknowledged(pr, l.notifyCfg) {
+			active++
+		}
+	}
+
+	return visible, active
 }

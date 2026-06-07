@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os/exec"
+	"time"
 
 	"github.com/getlantern/systray"
 
@@ -17,12 +18,13 @@ import (
 
 // Options bundles all dependencies for the tray.
 type Options struct {
-	Config  *config.AppConfig
-	Auth    *auth.Manager
-	Poll    *poller.Manager
-	Snooze  *poller.SnoozeStore
-	Notif   *notify.Notifier
-	Updater *updater.Updater
+	Config      *config.AppConfig
+	Auth        *auth.Manager
+	Poll        *poller.Manager
+	Snooze      *poller.SnoozeStore
+	Acknowledge *poller.AcknowledgeStore
+	Notif       *notify.Notifier
+	Updater     *updater.Updater
 }
 
 // Run blocks until the user quits the app. Call from main().
@@ -46,14 +48,14 @@ func onReady(opts Options) func() {
 		systray.SetTooltip("ghnotify — GitHub PR monitor")
 
 		// My PRs section — all slots created BEFORE the separator.
-		myList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "My Pull Requests", false, opts.Poll.MyPRs)
+		myList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, opts.Acknowledge, &opts.Config.Notifications, "My Pull Requests", false, opts.Poll.MyPRs)
 		myList.build()
 
 		systray.AddSeparator()
 
 		// Review Requests section — all slots created BEFORE the separator.
 		enableApprovePR := false
-		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, "Review Requests", enableApprovePR, opts.Poll.ReviewRequests)
+		reviewList := newPRList(opts.Config.MaxPRsPerSection, opts.Auth, opts.Snooze, opts.Acknowledge, &opts.Config.Notifications, "Review Requests", enableApprovePR, opts.Poll.ReviewRequests)
 		reviewList.build()
 
 		systray.AddSeparator()
@@ -74,28 +76,39 @@ func onReady(opts Options) func() {
 			mUpdate.SetTitle(fmt.Sprintf("Update available: %s  →", tag))
 		})
 
+		// recheck re-renders both PR lists and updates the icon. Called on every
+		// poll change and on the 60-second ticker to catch snooze expiry.
+		recheck := func() {
+			_, myActive := myList.update()
+			_, revActive := reviewList.update()
+			setIcon(myActive+revActive > 0)
+		}
+
 		// Subscribe to poll changes.
 		opts.Poll.OnChange(func(changes []poller.Change) {
 			slog.Debug("poll changes", "count", len(changes))
-
-			myCount := myList.update()
-			revCount := reviewList.update()
-			active := myCount+revCount > 0
-			setIcon(active)
+			recheck()
 			opts.Notif.HandleChanges(changes)
 		})
+
+		ticker := time.NewTicker(60 * time.Second)
 
 		go func() {
 			for {
 				select {
+				case <-ticker.C:
+					// Proactively recheck so timed snooze expiry reactivates the
+					// icon even when GitHub has no new activity.
+					recheck()
 				case <-mAckAll.ClickedCh:
-					setIcon(false)
+					allPRs := append(opts.Poll.MyPRs(), opts.Poll.ReviewRequests()...)
+					opts.Acknowledge.AcknowledgeAll(allPRs)
+					recheck()
 				case <-mPrefs.ClickedCh:
 					openConfig()
 				case <-mClearSnooze.ClickedCh:
 					opts.Snooze.ClearAll()
-					myList.update()
-					reviewList.update()
+					recheck()
 				case <-mUpdate.ClickedCh:
 					if latestURL != "" {
 						_ = exec.Command("open", latestURL).Start()
@@ -103,6 +116,7 @@ func onReady(opts Options) func() {
 						opts.Updater.CheckNow()
 					}
 				case <-mQuit.ClickedCh:
+					ticker.Stop()
 					cancelUpdater()
 					systray.Quit()
 					return
