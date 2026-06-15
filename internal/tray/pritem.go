@@ -133,6 +133,10 @@ func (it *prItem) currentPR() *github.PR {
 func (it *prItem) listen() {
 	for {
 		select {
+		case <-it.mItem.ClickedCh:
+			if pr := it.currentPR(); pr != nil {
+				_ = exec.Command("open", pr.URL).Start()
+			}
 		case <-it.mOpen.ClickedCh:
 			if pr := it.currentPR(); pr != nil {
 				_ = exec.Command("open", pr.URL).Start()
